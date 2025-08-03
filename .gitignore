@@ -1,33 +1,65 @@
-HELP.md
-target/
+# === Fichiers sensibles / secrets ===
+/config/
+/**/application-secrets.properties
+/**/.env
+/**/.env.*
+
+# === Backend build & config ===
+/backend/target/
+/backend/build/
+/backend/.idea/
+/backend/.classpath
+/backend/.project
+/backend/.settings/
+/backend/.springBeans
+/backend/.apt_generated
+/backend/.factorypath
+/backend/.sts4-cache
+/backend/.vscode/
+!/backend/src/main/**/target/
+!/backend/src/test/**/target/
+
+# === Frontend (Angular) ===
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.angular/
+/frontend/.output/
+/frontend/.env
+/frontend/.vscode/
+/frontend/.idea/
+
+# === Infra (Terraform, CDK, Docker) ===
+/infra/.terraform/
+/infra/terraform.tfstate
+/infra/terraform.tfstate.backup
+/infra/.cdk.out/
+/infra/.docker-volume/
+/infra/.env
+
+# === IDE & OS files ===
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+*.tmp
+*.orig
+
+# === Maven wrapper ===
+.mvn/
 .mvn/wrapper/maven-wrapper.jar
+
+# === Logs ===
+*.log
+logs/
+log/
+
+# === Test build artifacts ===
 !**/src/main/**/target/
 !**/src/test/**/target/
-
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
 !**/src/main/**/build/
 !**/src/test/**/build/
-
-### VS Code ###
-.vscode/

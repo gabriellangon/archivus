@@ -1,0 +1,114 @@
+
+## Spécifications Architecturales : Application Archivus
+
+### 1. Introduction
+
+Archivus est une application de gestion de notes et de contenu polyvalente, conçue pour permettre aux utilisateurs de capturer (texte, URLs, images) et de retrouver leurs informations via une recherche sémantique intelligente. L'objectif est d'éliminer le besoin de classification manuelle, en s'appuyant sur l'intelligence artificielle pour comprendre et récupérer le contenu pertinent.
+
+### 2. Vue d'Ensemble de l'Architecture
+
+L'architecture d'Archivus est une application web distribuée, s'appuyant sur des services cloud (AWS) et des technologies de conteneurisation pour la scalabilité, la résilience et la maintenance simplifiée. Elle combine un frontend moderne avec un backend robuste et des services spécialisés pour le traitement des données et la recherche avancée.
+
+
+### 3. Composants Techniques et Rôles
+
+#### 3.1. Frontend : Angular
+
+* **Rôle :** Interface utilisateur interactive (Single Page Application - SPA).
+* **Technologies :** **Angular**, **TypeScript**, HTML5, CSS (avec un focus sur un design épuré, minimaliste, élégant ou moderne).
+* **Déploiement AWS :** Fichiers statiques hébergés sur **AWS S3** et distribués via **AWS CloudFront** pour une livraison rapide et performante aux utilisateurs.
+
+#### 3.2. Backend Principal : Spring Boot
+
+* **Rôle :** Cœur de la logique métier, gestion des API REST, orchestration des flux de données.
+* **Technologies :** **Spring Boot (Java)**, Spring Security, Spring Data JPA/Hibernate, Apache Kafka Client, Elasticsearch Client.
+* **Fonctionnalités Clés :**
+    * Gestion des utilisateurs et de l'authentification/autorisation (**Spring Security** avec JWT/OAuth2).
+    * API RESTful pour les opérations CRUD sur les notes (texte, URL).
+    * Gestion du téléchargement d'images vers S3.
+    * Consommation des résultats de reconnaissance d'image via Kafka.
+    * Génération d'embeddings sémantiques pour les notes textuelles et les URLs.
+    * Indexation des données (texte, URL, mots-clés d'images, embeddings) dans Elasticsearch.
+    * Exécution des requêtes de recherche sémantique vers Elasticsearch et agrégation des résultats de PostgreSQL et S3.
+* **Déploiement AWS :** Conteneurisé avec **Docker**, déployé sur **AWS ECS (Elastic Container Service)** ou **AWS EKS (Elastic Kubernetes Service)** pour la scalabilité et la résilience.
+
+#### 3.3. Base de Données Principale : PostgreSQL
+
+* **Rôle :** Stockage persistant et relationnel de toutes les métadonnées des notes, utilisateurs, et références aux contenus (URLs d'images S3, textes bruts).
+* **Technologie :** **PostgreSQL**.
+* **Déploiement AWS :** Service de base de données managé **AWS RDS (Relational Database Service)** pour la haute disponibilité, les sauvegardes et la maintenance simplifiée.
+
+#### 3.4. Stockage d'Objets : AWS S3
+
+* **Rôle :** Stockage durable et scalable des fichiers d'images brutes.
+* **Technologie :** **AWS S3 (Simple Storage Service)**.
+* **Flux :** Les images téléchargées par l'utilisateur sont directement stockées par le backend Spring Boot dans un bucket S3.
+
+#### 3.5. Traitement d'Image Serverless : AWS Lambda
+
+* **Rôle :** Exécuter la logique de reconnaissance d'image de manière événementielle et scalable.
+* **Technologies :** **AWS Lambda (Python)**, **Amazon Rekognition** (ou autre service ML pour l'extraction de mots-clés/descriptions).
+* **Flux :** Un événement S3 déclenche la fonction Lambda dès qu'une nouvelle image est déposée dans le bucket. La Lambda traite l'image et **publie les résultats (mots-clés, descriptions)** sur un topic Kafka.
+* **Avantage :** Coût-efficacité (paiement à l'usage), scalabilité automatique, aucune gestion de serveur.
+
+#### 3.6. Bus de Messages Asynchrone : Apache Kafka
+
+* **Rôle :** Faciliter la communication asynchrone et découplée entre les services, garantir la fiabilité des transferts d'événements.
+* **Technologie :** **Apache Kafka**.
+* **Flux Clés :**
+    1.  **Lambda vers Spring Boot :** La Lambda publie les résultats de reconnaissance d'image sur un topic Kafka. Le backend Spring Boot consomme ces messages pour mettre à jour PostgreSQL et déclencher l'indexation sémantique.
+    2.  **Spring Boot vers Indexation :** Le backend Spring Boot publie des événements sur un topic Kafka chaque fois qu'une note (texte, URL) ou une image est prête pour l'indexation sémantique.
+* **Déploiement AWS :** Service de streaming managé **Amazon MSK (Managed Streaming for Kafka)** pour la haute disponibilité et la gestion simplifiée du cluster Kafka.
+
+#### 3.7. Moteur de Recherche Sémantique : Elasticsearch
+
+* **Rôle :** Indexer les données (texte, URL, mots-clés d'images) sous forme de vecteurs sémantiques (embeddings) et effectuer des recherches de similarité vectorielle complexes.
+* **Technologie :** **Elasticsearch** (via **OpenSearch**).
+* **Flux Clés :**
+    * **Indexation :** Le backend Spring Boot envoie des documents (contenant l'ID de la note/image, son type, et son vecteur sémantique) à Elasticsearch pour indexation.
+    * **Recherche :** Lors d'une requête utilisateur, Spring Boot convertit la requête en vecteur, l'envoie à Elasticsearch, qui retourne les IDs des documents les plus pertinents.
+* **Déploiement AWS :** Service de recherche managé **AWS OpenSearch Service**.
+
+---
+
+### 4. Processus Clés et Flux de Données
+
+#### 4.1. Flux de Création/Modification de Note (Texte/URL)
+
+1.  Angular soumet la note à l'API Spring Boot.
+2.  Spring Boot stocke la note dans PostgreSQL.
+3.  Spring Boot génère l'embedding sémantique du contenu textuel.
+4.  Spring Boot publie un événement sur Kafka (`semantic-index-events`) avec l'ID de la note, le type, et l'embedding.
+5.  Un consommateur Kafka (dans Spring Boot) reçoit l'événement et indexe le document correspondant dans OpenSearch Service.
+
+#### 4.2. Flux de Téléchargement et Traitement d'Image
+
+1.  Angular soumet l'image à l'API Spring Boot.
+2.  Spring Boot stocke l'image dans un bucket S3 et enregistre une référence dans PostgreSQL.
+3.  L'upload S3 déclenche la fonction AWS Lambda.
+4.  La Lambda utilise Amazon Rekognition pour extraire des mots-clés/descriptions de l'image.
+5.  La Lambda publie un message sur Kafka (`image-recognition-results`) avec l'ID de l'image, son URL S3, et les mots-clés extraits.
+6.  Un consommateur Kafka (dans Spring Boot) reçoit l'événement, met à jour les métadonnées de l'image dans PostgreSQL (si nécessaire) et génère l'embedding sémantique des mots-clés/descriptions.
+7.  Ce même consommateur indexe le document image (avec son embedding) dans OpenSearch Service.
+
+#### 4.3. Flux de Recherche Sémantique
+
+1.  L'utilisateur saisit une requête dans Angular.
+2.  Angular envoie la requête à l'API Spring Boot.
+3.  Spring Boot génère l'embedding sémantique de la requête utilisateur.
+4.  Spring Boot envoie une requête de similarité vectorielle à OpenSearch Service.
+5.  OpenSearch Service retourne une liste d'IDs de notes/images pertinentes.
+6.  Spring Boot utilise ces IDs pour récupérer les détails complets des notes/images depuis PostgreSQL (et les URLs S3 pour les images).
+7.  Spring Boot renvoie les données complètes à Angular.
+8.  Angular affiche les résultats à l'utilisateur.
+
+---
+
+### 5. Outils et Bonnes Pratiques Complémentaires
+
+* **Conteneurisation :** Utilisation intensive de **Docker** pour packager les applications (Spring Boot) et assurer la portabilité et la cohérence des environnements.
+* **Orchestration de Conteneurs :** Déploiement sur **AWS ECS/EKS** pour la gestion de la scalabilité, de la haute disponibilité et du cycle de vie des conteneurs en production.
+* **Sécurité :** Mise en œuvre de **Spring Security** pour l'authentification (JWT/OAuth2) et l'autorisation. Gestion sécurisée des secrets avec **AWS Secrets Manager** ou **AWS Parameter Store**.
+* **CI/CD :** Implémentation de pipelines d'Intégration Continue / Déploiement Continu (ex: **GitHub Actions**, **GitLab CI/CD**, ou **AWS CodePipeline/CodeBuild/CodeDeploy**) pour automatiser le build, les tests et le déploiement.
+* **Tests :** Utilisation de **JUnit 5 / Mockito** pour le backend et **Jest / Karma / Jasmine** pour le frontend, ainsi que des tests d'intégration et E2E.
+* **Monitoring & Observabilité :** Intégration de **Micrometer** dans Spring Boot pour les métriques, agrégation des logs via **AWS CloudWatch Logs** ou **ELK Stack**, et potentiellement un tableau de bord avec **Grafana**.
